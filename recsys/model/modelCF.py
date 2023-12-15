@@ -124,9 +124,7 @@ def train_model_CF():
     epochs = 4
     batch_size = 1024
 
-    # Load model
-    modelCF_path = os.path.join(current_directory, '../model/modelCF.h5')
-    prev_modelCF = load_model(modelCF_path)
+    # Load previous best performance if exists
     try:
         performance_path = os.path.join(current_directory, '../performance')
         with open(f'{performance_path}/hitrates_avg_CF.pkl', 'rb') as f:
