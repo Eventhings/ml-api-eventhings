@@ -95,7 +95,7 @@ def load_dataset():
     Loads the dataset and transforms it into the format we need. 
     We then split it into a training and a test set.
     """
-    
+
     current_directory = os.path.dirname(os.path.abspath(__file__))
 
     vendor_path = os.path.join(current_directory, '../data/vendor.csv')

@@ -68,20 +68,21 @@ async def recommendItem(req: Recommendation):
         ndcgs_avg = pickle.load(f)
     
     try:
-        # Predict ratings using CF model
-        cf_works = True
-        ratingsCF = predict_ratings_cf(
-            user_idx = userID,
-            items = items,
-            model = modelCF
-        )
+        if userID in uids:
+            # Predict ratings using CF model
+            cf_works = True
+            ratingsCF = predict_ratings_cf(
+                user_idx = userID,
+                items = items,
+                model = modelCF
+            )
+            
+            recommendations = get_top_k_items(ratingsCF, k = 10)
+            average_ratings = np.mean([item[1] for item in recommendations])
         
-        recommendations = get_top_k_items(ratingsCF, k = 10)
-        average_ratings = np.mean([value for key, value in recommendations.items()])
-    
-        # If predicted rating avg. is less than 4 or HR@10 is less than 0.4 then CF model fails
-        if (average_ratings >= 4) or (hitrates_avg >= 0.4) or (ndcgs_avg >= 0.3):
-            recommendation_items = [key for key, value in recommendations.items()]
+            # If predicted rating avg. is less than 4 or HR@10 is less than 0.4 then CF model fails
+            if (average_ratings >= 4) or (hitrates_avg >= 0.4) or (ndcgs_avg >= 0.3):
+                recommendation_items = [item[0] for item in recommendations]
     
         # Else proceed to predict using CB model
         cf_works = False

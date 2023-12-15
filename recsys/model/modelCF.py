@@ -162,6 +162,3 @@ def train_model_CF():
                 pickle.dump(ndcgs_avg, f)
 
             print("Model has been updated.")
-
-
-train_model_CF()
