@@ -1,5 +1,4 @@
 import pickle
-import numpy as np
 
 import tensorflow as tf
 from tensorflow.keras.layers import Input, Embedding, Flatten, Multiply, Dropout, Dense, BatchNormalization, Concatenate
@@ -7,7 +6,7 @@ from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import L1, L2
 
-from utils import *
+from .utils import *
 
 #------------------------------------------------------------------------------------------------------------------------------#
 
@@ -114,7 +113,8 @@ def model(users, items):
 
 
 def train_model_CF():
-    current_directory = os.path.dirname(os.path.abspath(__file__))
+    recsys_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
+    modelCF_path = os.path.join(recsys_directory, 'model')
 
     # Load dataset
     uids, iids, df_train, df_test, df_neg, users, items = load_dataset()
@@ -126,11 +126,12 @@ def train_model_CF():
 
     # Load previous best performance if exists
     try:
-        performance_path = os.path.join(current_directory, '../performance')
-        with open(f'{performance_path}/hitrates_avg_CF.pkl', 'rb') as f:
+        performance_path = os.path.join(recsys_directory, 'performance')
+        with open(os.path.join(performance_path, 'hitrates_avg_CF.pkl'), 'rb') as f:
             best_hr = pickle.load(f)
-        with open(f'{performance_path}/ndcgs_avg_CF.pkl', 'rb') as f:
+        with open(os.path.join(performance_path, 'ndcgs_avg_CF.pkl'), 'rb') as f:
             best_ndcgs = pickle.load(f)
+
     except:
         best_hr = 0
         best_ndcgs = 0
@@ -151,12 +152,12 @@ def train_model_CF():
         (hitrates, ndcgs) = evaluate(curr_modelCF, df_test, df_neg)
         hitrates_avg, ndcgs_avg, loss = np.array(hitrates).mean(), np.array(ndcgs).mean(), hist.history['loss'][0]
         if hitrates_avg > best_hr:
-            curr_modelCF.save(modelCF_path)
+            curr_modelCF.save(os.path.join(modelCF_path, 'modelCF.h5'))
             
-            with open(f'{performance_path}/hitrates_avg_CF.pkl', 'wb') as f:
+            with open(os.path.join(performance_path, 'hitrates_avg_CF.pkl'), 'wb') as f:
                 pickle.dump(hitrates_avg, f)
 
-            with open(f'{performance_path}/ndcgs_avg_CF.pkl', 'wb') as f:
+            with open(os.path.join(performance_path, 'ndcgs_avg_CF.pkl'), 'wb') as f:
                 pickle.dump(ndcgs_avg, f)
 
             print("Model has been updated.")

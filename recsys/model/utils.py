@@ -102,11 +102,11 @@ def load_dataset():
     rating_path = os.path.join(current_directory, '../data/rating.csv')
     vendor = pd.read_csv(vendor_path)
     rating = pd.read_csv(rating_path)
-    
-    vendor = vendor.head(500)
 
     df = pd.merge(vendor, rating, on = 'vendorID', how = 'inner')
     df = df[['userID', 'vendorID', 'rating']]
+
+    df = df.loc[df['rating'] >= 4]
 
     # Create training and test sets.
     df_train, df_test = train_test_split(df)
@@ -119,11 +119,9 @@ def load_dataset():
     rows = df_train['userID'].astype(int)
     cols = df_train['vendorID'].astype(int)
 
-    values = list(df_train['rating'])
-
     # Get all user ids and item ids.
-    uids = np.array(rows.tolist())
-    iids = np.array(cols.tolist())
+    uids = rows.tolist()
+    iids = cols.tolist()
 
     # Sample negative interactions for each user in our test data
     df_neg = get_negatives(uids, iids, items, df_test)
@@ -301,4 +299,12 @@ def get_top_k_items(dct, k = 10):
     # Use nlargest to get the top n key-value pairs based on values.
     top_k_items = heapq.nlargest(k, dct.items(), key = lambda item: item[1])
 
-    return top_k_items
+    # Calculate avg rating for each item.
+    average_ratings = [item[1] for item in top_k_items]
+    recommendation_items = [item[0] for item in top_k_items]
+
+    # Convert all items to strings.
+    average_ratings = [str(item) for item in average_ratings]
+    recommendation_items = [str(item) for item in recommendation_items]
+
+    return average_ratings, recommendation_items

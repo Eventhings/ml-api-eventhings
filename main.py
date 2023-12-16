@@ -1,4 +1,6 @@
+import os
 import pickle
+import traceback
 import numpy as np
 
 from tensorflow.keras.models import load_model
@@ -29,27 +31,39 @@ app.add_middleware(
 )
 
 
-@app.get("/")
+@app.get('/')
 async def root():
-    return {"message": "Hello World"}
+    return {'message': 'Hello World'}
 
 
 class Recommendation(BaseModel):
-    userID: str
+    userID: int
 
 
 @app.post('/recsys/train')
 def train():
-    train_model_CF()
-    '''
-    train_model_CB()
-    '''
+    try:
+        train_model_CF()
+        '''
+        train_model_CB()
+        '''
 
-    return 'Model trained successfully.'
+        dct = {
+            'status': 200,
+            'desc': 'model trained successfully.'
+        }
+
+    except:
+        dct = {
+            'status': 404,
+            'desc': 'model training has failed.'
+        }
+
+    return dct
 
 @app.post('/recsys/recommend')
 async def recommendItem(req: Recommendation):
-    current_directory = os.path.dirname(os.path.abspath(__file__))
+    current_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'recsys')
 
     # Current user
     userID = req.userID
@@ -58,43 +72,39 @@ async def recommendItem(req: Recommendation):
     uids, iids, df_train, df_test, df_neg, users, items = load_dataset()
 
     # Load CF model and its perforamnce
-    modelCF_path = os.path.join(current_directory, '../model/modelCF.h5')
-    modelCF = load_model(modelCF_path)
+    modelCF_path = os.path.join(current_directory, 'model')
+    modelCF = load_model(os.path.join(modelCF_path, 'modelCF.h5'))
 
-    performance_path = os.path.join(current_directory, '../performance')
-    with open(f'{performance_path}/hitrates_avg_CF.pkl', 'wb') as f:
+    
+    performance_path = os.path.join(current_directory, 'performance')
+    with open(os.path.join(performance_path, 'hitrates_avg_CF.pkl'), 'rb') as f:
         hitrates_avg = pickle.load(f)
-    with open(f'{performance_path}/ndcgs_avg_CF.pkl', 'wb') as f:
+    with open(os.path.join(performance_path, 'ndcgs_avg_CF.pkl'), 'rb') as f:
         ndcgs_avg = pickle.load(f)
+        
     
     try:
+        # If user has not give any rating or has not click some vendor(s) within a session
         if userID in uids:
             # Predict ratings using CF model
-            cf_works = True
             ratingsCF = predict_ratings_cf(
                 user_idx = userID,
                 items = items,
                 model = modelCF
             )
-            
-            recommendations = get_top_k_items(ratingsCF, k = 10)
-            average_ratings = np.mean([item[1] for item in recommendations])
-        
-            # If predicted rating avg. is less than 4 or HR@10 is less than 0.4 then CF model fails
-            if (average_ratings >= 4) or (hitrates_avg >= 0.4) or (ndcgs_avg >= 0.3):
-                recommendation_items = [item[0] for item in recommendations]
+
+            average_ratings, recommendation_items = get_top_k_items(ratingsCF, k = 10)
     
         # Else proceed to predict using CB model
-        cf_works = False
-        
-        '''
-        FILL THE CODE HERE FOR CB
-        '''
-        recommendation_items = []
+        else:
+            '''
+            FILL THE CODE HERE FOR CB
+            '''
+            recommendation_items = []
 
         dct = {
             'status': 200,
-            'message': "recommendation for user has been successfully get.",
+            'message': 'recommendation for user has been successfully get.',
             'data': {
                 'user_id': userID,
                 'recommendations': recommendation_items
@@ -105,15 +115,18 @@ async def recommendItem(req: Recommendation):
 
     except Exception as e:
         recommendation_items = []
+        traceback.print_exc()
+
         dct = {
+            'userID': userID,
             'status': 404,
-            'message': "recommendation for user has failed.",
+            'message': 'recommendation for user has failed.',
             'data': {
                 'user_id': userID,
                 'recommendations': recommendation_items
                 },
             'success': False,
-            'error': e
+            'error': str(e)
         }
 
     return dct
