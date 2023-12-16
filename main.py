@@ -74,15 +74,14 @@ async def recommendItem(req: Recommendation):
     # Load CF model and its perforamnce
     modelCF_path = os.path.join(current_directory, 'model')
     modelCF = load_model(os.path.join(modelCF_path, 'modelCF.h5'))
-
     
     performance_path = os.path.join(current_directory, 'performance')
     with open(os.path.join(performance_path, 'hitrates_avg_CF.pkl'), 'rb') as f:
         hitrates_avg = pickle.load(f)
     with open(os.path.join(performance_path, 'ndcgs_avg_CF.pkl'), 'rb') as f:
         ndcgs_avg = pickle.load(f)
-        
-    
+
+
     try:
         # If user has not give any rating or has not click some vendor(s) within a session
         if userID in uids:
