@@ -8,14 +8,20 @@ from tensorflow.keras.models import load_model
 from recsys.model.modelCF import *
 from recsys.model.utils import *
 
-from fastapi import FastAPI
+from fastapi import FastAPI,HTTPException,Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel
+
+import Capstone_NLP_Emotions as cne
+import importlib
+importlib.reload(cne)
 
 #------------------------------------------------------------------------------------------------------------------------------#
 
 app = FastAPI()
+db_conn = cne.Load_Data_NLP()
 
 origins = [
     "http://localhost",
@@ -130,3 +136,47 @@ async def recommendItem(req: Recommendation):
         }
 
     return dct
+
+@app.get('/nlpe/collective/{cat}/{cat_id}')
+def nlpe_coll_sp(cat_id:str,
+                 cat:str,
+                 response: Response):
+    DF_PROCESS = db_conn.load_data(f'{cat}_review')
+    sentences = DF_PROCESS.loc[DF_PROCESS.iloc[:,1]==cat_id,'review'].values
+    if cat_id not in DF_PROCESS.iloc[:,1].values:
+        raise HTTPException(status_code=404, detail="The cat_id is not available.")
+    if len(sentences) == 0:
+        return JSONResponse(content=None, status_code=200)
+    else:
+        nlp_class = cne.NLP_emotion('nlp_emotion_model.h5','label_encoder.joblib','my_tokenizer.json',sentences)
+        nlp_por = nlp_class.percentage_emotions()
+        return_dict = {f'{cat}_id':cat_id,
+                'status':200,
+                'message':'Emotion analysis for user review has been successfully get.',
+                'emotion_portion':nlp_por,
+                'success': True,
+                'error': None}
+        return JSONResponse(content=return_dict, status_code=200)
+    
+@app.get('/nlpe/per_review/{cat}/{review_id}')
+def nlpe_per_sp(review_id:str,
+                cat:str,
+                response:Response):
+    DF_PROCESS = db_conn.load_data(f'{cat}_review')
+    sentences = DF_PROCESS.loc[DF_PROCESS.iloc[:,0]==review_id,'review'].values
+    if review_id not in DF_PROCESS.iloc[:,0].values:
+        raise HTTPException(status_code=404, detail="The review_id is not available.")
+    if len(sentences) == 0:
+        return JSONResponse(content=None, status_code=200)
+    else:
+        nlp_class = cne.NLP_emotion('nlp_emotion_model.h5','label_encoder.joblib','my_tokenizer.json',sentences)
+        nlp_por = nlp_class.percentage_emotions()
+        max_key, max_value = max(nlp_por.items(), key=lambda x: x[1])
+        return_dict = {'review_id':review_id,
+                       'status':200,
+                       'message':'Emotion analysis for user review has been successfully get.',
+                       'dominant_emotion':max_key,
+                       'dominant_percentage':max_value,
+                       'success': True,
+                       'error': None}
+        return JSONResponse(content=return_dict, status_code=200)
