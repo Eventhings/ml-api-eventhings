@@ -3,9 +3,14 @@ import math
 import heapq
 import pandas as pd
 import numpy as np
+import psycopg2
+
+from sklearn.preprocessing import LabelEncoder
 
 #------------------------------------------------------------------------------------------------------------------------------#
 
+from dotenv import load_dotenv
+import os
 
 def get_negatives(uids, iids, items, df_test):
     """
@@ -24,8 +29,8 @@ def get_negatives(uids, iids, items, df_test):
     """
 
     negativeList = []
-    test_u = df_test['userID'].values.tolist()
-    test_i = df_test['vendorID'].values.tolist()
+    test_u = df_test['user_id'].values.tolist()
+    test_i = df_test['vendor_id'].values.tolist()
 
     test_ratings = list(zip(test_u, test_i))
     zipped = set(zip(uids, iids))
@@ -79,12 +84,12 @@ def train_test_split(df):
 
     # Group by user_id and select only the first item for
     # each user (our holdout).
-    df_test = df_test.groupby(['userID']).first()
-    df_test['userID'] = df_test.index
-    df_test = df_test[['userID', 'vendorID', 'rating']]
+    df_test = df_test.groupby(['user_id']).first()
+    df_test['user_id'] = df_test.index
+    df_test = df_test[['user_id', 'vendor_id', 'rating']]
 
     # Remove the same items for our test set in our training set.
-    mask = df.groupby(['userID'])['userID'].transform(mask_first).astype(bool)
+    mask = df.groupby(['user_id'])['user_id'].transform(mask_first).astype(bool)
     df_train = df.loc[mask]
 
     return df_train, df_test
@@ -96,40 +101,85 @@ def load_dataset():
     We then split it into a training and a test set.
     """
 
-    current_directory = os.path.dirname(os.path.abspath(__file__))
+    try:
+        dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+        load_dotenv(dotenv_path)
+        DB_USERNAME = os.getenv('DB_USERNAME')
+        DB_PASSWORD = os.getenv('DB_PASSWORD')
+        DB_HOST = os.getenv('DB_HOST')
+        DB_PORT = os.getenv('DB_PORT')
+        DB_DATABASE = os.getenv('DB_DATABASE')
+        DB_DATABASE_DEV = os.getenv('DB_DATABASE_DEV')
 
-    vendor_path = os.path.join(current_directory, '../data/vendor.csv')
-    rating_path = os.path.join(current_directory, '../data/rating.csv')
-    vendor = pd.read_csv(vendor_path)
-    rating = pd.read_csv(rating_path)
+        connection = psycopg2.connect(database = DB_DATABASE, 
+                                      host = DB_HOST, 
+                                      user = DB_USERNAME,
+                                      password = DB_PASSWORD, 
+                                      port = DB_PORT)
+        
+        cursor = connection.cursor()
 
-    df = pd.merge(vendor, rating, on = 'vendorID', how = 'inner')
-    df = df[['userID', 'vendorID', 'rating']]
+        # Fetch data for media partner
+        cursor.execute("SELECT user_id, mp_id, rating FROM media_partner_review")
+        medpar_data = cursor.fetchall()
+        medpar_cols = [desc.name for desc in cursor.description]
+        df_medpar = pd.DataFrame(medpar_data, columns = medpar_cols)
+        df_medpar = df_medpar.rename(columns = {'mp_id': 'vendor_id'})
 
-    df = df.loc[df['rating'] >= 4]
+        # Fetch data for rental
+        cursor.execute("SELECT user_id, rt_id, rating FROM rentals_review")
+        rental_data = cursor.fetchall()
+        rental_cols = [desc.name for desc in cursor.description]
+        df_rental = pd.DataFrame(rental_data, columns = rental_cols)
+        df_rental = df_rental.rename(columns = {'rt_id': 'vendor_id'})
 
-    # Create training and test sets.
-    df_train, df_test = train_test_split(df)
+        # Fetch data for sponsorship
+        cursor.execute("SELECT user_id, sp_id, rating FROM sponsorship_review")
+        sponsor_data = cursor.fetchall()
+        sponsor_cols = [desc.name for desc in cursor.description]
+        df_sponsor = pd.DataFrame(sponsor_data, columns = sponsor_cols)
+        df_sponsor = df_sponsor.rename(columns = {'sp_id': 'vendor_id'})
 
-    # Create lists of all unique users and artists
-    users = list(np.sort(df['userID'].unique()))
-    items = list(np.sort(df['vendorID'].unique()))
+        # Union the results
+        df = pd.concat([df_medpar, df_rental, df_sponsor], ignore_index=True)
+        df = df[['user_id', 'vendor_id', 'rating']]
 
-    # Get the rows, columns and values for our matrix.
-    rows = df_train['userID'].astype(int)
-    cols = df_train['vendorID'].astype(int)
+        # Encode user_id and vendor_id
+        label_encoder_user = LabelEncoder()
+        label_encoder_item = LabelEncoder() 
 
-    # Get all user ids and item ids.
-    uids = rows.tolist()
-    iids = cols.tolist()
+        df['user_id'] = label_encoder_user.fit_transform(df['user_id'])
+        df['vendor_id'] = label_encoder_item.fit_transform(df['vendor_id'])
 
-    # Sample negative interactions for each user in our test data
-    df_neg = get_negatives(uids, iids, items, df_test)
+        # Create training and test sets.
+        df_train, df_test = train_test_split(df)
 
-    return uids, iids, df_train, df_test, df_neg, users, items
+        # Create lists of all unique users and artists
+        users = list(df['user_id'].unique()) # Label
+        items = list(df['vendor_id'].unique()) # Label
+
+        # Get all user ids and item ids.
+        uids = df_train['user_id'].tolist() # Label
+        iids = df_train['vendor_id'].tolist() # Label
+
+        # Sample negative interactions for each user in our test data
+        df_neg = get_negatives(uids, iids, items, df_test)
+
+        return uids, iids, df_train, df_test, df_neg, users, items, label_encoder_user, label_encoder_item
+    
+    # Exception handling
+    except Exception as e:
+        return e
+    
+    # Close DB connection
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 
-def get_train_instances(uids, iids, items, num_neg = 4):
+def get_train_instances(uids, iids, items, num_neg = 5):
     """
     Samples a number of negative user-item interactions for each
     user-item pair in our testing data.
@@ -191,53 +241,62 @@ def get_ndcg(ranklist, gtItem):
     return 0
 
 
-def predict_ratings_cf(user_idx, items, model):
+def predict_ratings_cf(user_id, items, model, label_user, label_item):
     """
     Predict rating score for each user.
 
     Args:
-        user_idx (int): Current index
+        user_id (int): Current user_id
         items (list): List of all unique items
         model (h5): Tensorflow model
+        label_user (int): Label encoder for user
+        label_item (int): Label encoder for item
         
     Returns:
         map_item_score (list): predicted current user rating for each item.
     """
+
     # Prepare user and item arrays for the model.
-    predict_user = np.full(len(items), user_idx, dtype = 'int32').reshape(-1, 1)
+    user_id = label_user.transform([user_id])[0]
+    predict_user = np.full(len(items), user_id, dtype = 'int32').reshape(-1, 1)
     np_items = np.array(items).reshape(-1, 1)
 
     # Predict ratings using the model.
     predictions = model.predict([predict_user, np_items]).flatten().tolist()
 
     # Map predicted score to item id.
+    items = label_item.inverse_transform(items)
     map_item_score = dict(zip(items, predictions))
 
     return map_item_score
     
 
-def eval_rating(idx, test_ratings, test_negatives, K, model):
+def eval_rating(idx, test_ratings, test_negatives, K, model, label_user, label_item):
     """
     Generate ratings for the users in our test set and
     check if our holdout item is among the top K highest scores
     and evaluate its position.
     
     Args:
-        idx (int): Current index
+        idx (int): Current user_id label
         test_ratings (list): Our test set user-item pairs
         test_negatives (list): negative items for each
             user in our test set.
         K (int): number of top recommendations
+        label_user (int): Label encoder for user
+        label_item (int): Label encoder for item
         
     Returns:
         hitrate (list): A list of 1 if the holdout appeared in our
             top K predicted items. 0 if not.
     """
+
     # Get the negative interactions for our user.
     items = test_negatives[idx]
 
     # Get the user idx.
     user_idx = test_ratings[idx][0]
+    user_idx = label_user.inverse_transform([user_idx])[0]
 
     # Get the item idx, i.e., our holdout item.
     holdout = test_ratings[idx][1]
@@ -246,7 +305,7 @@ def eval_rating(idx, test_ratings, test_negatives, K, model):
     items.append(holdout)
 
     # Predict ratings using the model.
-    map_item_score = predict_ratings_cf(user_idx, items, model)
+    map_item_score = predict_ratings_cf(user_idx, items, model, label_user, label_item)
     items.pop()
 
     # Get the K highest ranked items as a list.
@@ -259,7 +318,7 @@ def eval_rating(idx, test_ratings, test_negatives, K, model):
     return (hitrate, ndcg)
 
 
-def evaluate(model, df_test, df_neg, K = 10):
+def evaluate(model, df_test, df_neg, label_user, label_item, K = 10):
     """
     Calculate the top@K hit ratio for our recommendations.
     
@@ -267,6 +326,8 @@ def evaluate(model, df_test, df_neg, K = 10):
         df_neg (dataframe): dataframe containing our holdout items
             and 100 randomly sampled negative interactions for each
             (user, item) holdout pair.
+        label_user (int): Label encoder for user
+        label_item (int): Label encoder for item
         K (int): The 'K' number of ranked predictions we want
             our holdout item to be present in. 
             
@@ -278,17 +339,17 @@ def evaluate(model, df_test, df_neg, K = 10):
     hitrates = []
     ndcgs = []
 
-    test_u = df_test['userID'].values.tolist()
-    test_i = df_test['vendorID'].values.tolist()
+    test_u = df_test['user_id'].values.tolist()
+    test_i = df_test['vendor_id'].values.tolist()
 
     test_ratings = list(zip(test_u, test_i))
 
     df_neg = df_neg.drop(df_neg.columns[0], axis = 1)
     test_negatives = df_neg.values.tolist()
 
-    for idx in range(len(test_ratings)):
+    for user_id in test_u:
         # For each idx, call eval_one_rating
-        (hitrate, ndcg) = eval_rating(idx, test_ratings, test_negatives, K, model)
+        (hitrate, ndcg) = eval_rating(user_id, test_ratings, test_negatives, K, model, label_user, label_item)
         hitrates.append(hitrate)
         ndcgs.append(ndcg)
 

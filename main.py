@@ -20,6 +20,7 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://localhost:3000",
+    # "*"
 ]
 
 app.add_middleware(
@@ -37,16 +38,13 @@ async def root():
 
 
 class Recommendation(BaseModel):
-    userID: int
+    user_id: str
 
 
-@app.post('/recsys/train')
+@app.post('/recsys/cf/train')
 def train():
     try:
         train_model_CF()
-        '''
-        train_model_CB()
-        '''
 
         dct = {
             'status': 200,
@@ -61,15 +59,15 @@ def train():
 
     return dct
 
-@app.post('/recsys/recommend')
+@app.post('/recsys/cf/recommend')
 async def recommendItem(req: Recommendation):
     current_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'recsys')
 
     # Current user
-    userID = req.userID
+    user_id = req.user_id
 
     # Load data
-    uids, iids, df_train, df_test, df_neg, users, items = load_dataset()
+    uids, iids, df_train, df_test, df_neg, users, items, label_encoder_user, label_encoder_item = load_dataset()
 
     # Load CF model and its perforamnce
     modelCF_path = os.path.join(current_directory, 'model')
@@ -84,12 +82,15 @@ async def recommendItem(req: Recommendation):
 
     try:
         # If user has not give any rating or has not click some vendor(s) within a session
-        if userID in uids:
+        uids = label_encoder_user.inverse_transform(uids)
+        if user_id in uids:
             # Predict ratings using CF model
             ratingsCF = predict_ratings_cf(
-                user_idx = userID,
+                user_id = user_id,
                 items = items,
-                model = modelCF
+                model = modelCF,
+                label_user = label_encoder_user,
+                label_item = label_encoder_item
             )
 
             average_ratings, recommendation_items = get_top_k_items(ratingsCF, k = 10)
@@ -105,7 +106,7 @@ async def recommendItem(req: Recommendation):
             'status': 200,
             'message': 'recommendation for user has been successfully get.',
             'data': {
-                'user_id': userID,
+                'user_id': user_id,
                 'recommendations': recommendation_items
                 },
             'success': True,
@@ -117,11 +118,11 @@ async def recommendItem(req: Recommendation):
         traceback.print_exc()
 
         dct = {
-            'userID': userID,
+            'userID': user_id,
             'status': 404,
             'message': 'recommendation for user has failed.',
             'data': {
-                'user_id': userID,
+                'user_id': user_id,
                 'recommendations': recommendation_items
                 },
             'success': False,

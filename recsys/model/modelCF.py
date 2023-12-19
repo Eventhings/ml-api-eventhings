@@ -8,6 +8,9 @@ from tensorflow.keras.regularizers import L1, L2
 
 from .utils import *
 
+from dotenv import load_dotenv
+import os
+
 #------------------------------------------------------------------------------------------------------------------------------#
 
 
@@ -26,35 +29,35 @@ def model(users, items):
 
     # User embedding for MLP
     mlp_user_embedding = Embedding(input_dim = len(users), 
-                                output_dim = latent_features,
-                                embeddings_initializer = 'random_normal',
-                                embeddings_regularizer = L1(0.01),
-                                input_length = 1, 
-                                name = 'mlp_user_embedding')(user_input)
+                                    output_dim = latent_features,
+                                    embeddings_initializer = 'random_normal',
+                                    embeddings_regularizer = L1(0.01),
+                                    input_length = 1, 
+                                    name = 'mlp_user_embedding')(user_input)
 
     # Item embedding for MLP
     mlp_item_embedding = Embedding(input_dim = len(items), 
-                                output_dim = latent_features,
-                                embeddings_initializer = 'random_normal',
-                                embeddings_regularizer = L1(0.01),
-                                input_length = 1, 
-                                name = 'mlp_item_embedding')(item_input)
+                                   output_dim = latent_features,
+                                   embeddings_initializer = 'random_normal',
+                                   embeddings_regularizer = L1(0.01),
+                                   input_length = 1, 
+                                   name = 'mlp_item_embedding')(item_input)
 
     # User embedding for GMF
     gmf_user_embedding = Embedding(input_dim = len(users), 
-                                output_dim = latent_features,
-                                embeddings_initializer = 'random_normal',
-                                embeddings_regularizer = L1(0.01),
-                                input_length = 1, 
-                                name = 'gmf_user_embedding')(user_input)
+                                   output_dim = latent_features,
+                                   embeddings_initializer = 'random_normal',
+                                   embeddings_regularizer = L1(0.01),
+                                   input_length = 1, 
+                                   name = 'gmf_user_embedding')(user_input)
 
     # Item embedding for GMF
     gmf_item_embedding = Embedding(input_dim = len(items), 
-                                output_dim = latent_features,
-                                embeddings_initializer = 'random_normal',
-                                embeddings_regularizer = L1(0.01),
-                                input_length = 1, 
-                                name = 'gmf_item_embedding')(item_input)
+                                   output_dim = latent_features,
+                                   embeddings_initializer = 'random_normal',
+                                   embeddings_regularizer = L1(0.01),
+                                   input_length = 1, 
+                                   name = 'gmf_item_embedding')(item_input)
 
     # GMF layers
     gmf_user_flat = Flatten()(gmf_user_embedding)
@@ -117,7 +120,7 @@ def train_model_CF():
     modelCF_path = os.path.join(recsys_directory, 'model')
 
     # Load dataset
-    uids, iids, df_train, df_test, df_neg, users, items = load_dataset()
+    uids, iids, df_train, df_test, df_neg, users, items, label_encoder_user, label_encoder_item = load_dataset()
     
     # HYPERPARAMS
     num_neg = 4
@@ -149,9 +152,9 @@ def train_model_CF():
                                 shuffle = True)
 
         # Evaluation
-        (hitrates, ndcgs) = evaluate(curr_modelCF, df_test, df_neg)
+        (hitrates, ndcgs) = evaluate(curr_modelCF, df_test, df_neg, label_encoder_user, label_encoder_item)
         hitrates_avg, ndcgs_avg, loss = np.array(hitrates).mean(), np.array(ndcgs).mean(), hist.history['loss'][0]
-        if hitrates_avg > best_hr:
+        if hitrates_avg >= best_hr:
             curr_modelCF.save(os.path.join(modelCF_path, 'modelCF.h5'))
             
             with open(os.path.join(performance_path, 'hitrates_avg_CF.pkl'), 'wb') as f:
