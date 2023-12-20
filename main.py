@@ -2,7 +2,7 @@ import os
 import pickle
 import traceback
 import numpy as np
-
+from dotenv import dotenv_values
 from tensorflow.keras.models import load_model
 
 from recsys.model.model_cf import *
@@ -22,16 +22,14 @@ import recsys.model.Capstone_CB_Recsys as cb
 import importlib
 importlib.reload(cb)
 
+load_dotenv()
 #------------------------------------------------------------------------------------------------------------------------------#
-
 app = FastAPI()
 nlp_db = cne.Load_Data_NLP()
 cb_db = cb.Load_Data_CB()
 
 origins = [
-    "http://localhost",
-    "http://localhost:3000",
-    # "*"
+    "*"
 ]
 
 app.add_middleware(
