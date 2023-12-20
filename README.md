@@ -4,7 +4,7 @@
 </p>
 In the ever-evolving landscape of event planning, Eventh!ngs emerges as a revolutionary solution, meticulously designed to simplify the intricate process of organizing events. The project’s Executive Summary encapsulates its core essence — a potent fusion of advanced technologies and user-centric design to redefine the event organization paradigm.
 
-This repository is for the Machine Learning services used for Eventh!ngs Product Capstone Project
+This repository is for the Machine Learning services used for Eventh!ngs Product Capstone Project.
 
 ## Team Members
 - M296BSX0246 - Arsya Amalia Ristias - Universitas Pembangunan Nasional Veteran Jawa Timur - Machine Learning - [Active]
@@ -20,12 +20,12 @@ This repository is for the Machine Learning services used for Eventh!ngs Product
 - Numpy (Numerical and Mathematical Operations)
 - Pandas (Data Manipulation and Analysis)
 - PostgreSQL (SQL Database)
-- Sklearn (Model Metric Performance)
-- Tensorflow (Recommendation System Model 1)
-- FuzzyWuzzy (Recommendation System Model 2)
+- Sklearn (Count Vectorizing and Encoding)
+- Tensorflow (Recommendation System and Natural Language Processing)
 - NLTK (Natural Language Processing)
-- Pickle (Save Model in .h5 Format)
+- Pickle, Joblib (Save Model and Encoder)
 - FastAPI (Deploy Models as APIs)
+- Math, Heapq (Other calculations)
 
 ## Features
 - [x] Content Based Recommendation System Model
