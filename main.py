@@ -5,7 +5,7 @@ import numpy as np
 
 from tensorflow.keras.models import load_model
 
-from recsys.model.modelCF import *
+from recsys.model.model_cf import *
 from recsys.model.utils import *
 
 from fastapi import FastAPI,HTTPException,Response
@@ -55,7 +55,7 @@ class Recommendation(BaseModel):
 @app.post('/recsys/cf/train')
 def train():
     try:
-        train_model_CF()
+        train_model_cf()
 
         dct = {
             'status': 200,
@@ -78,40 +78,32 @@ async def recommendItem(req: Recommendation):
     user_id = req.user_id
 
     # Load data
-    uids, iids, df_train, df_test, df_neg, users, items, label_encoder_user, label_encoder_item = load_dataset()
-
-    # Load CF model and its perforamnce
-    modelCF_path = os.path.join(current_directory, 'model')
-    modelCF = load_model(os.path.join(modelCF_path, 'modelCF.h5'))
-    
-    performance_path = os.path.join(current_directory, 'performance')
-    with open(os.path.join(performance_path, 'hitrates_avg_CF.pkl'), 'rb') as f:
-        hitrates_avg = pickle.load(f)
-    with open(os.path.join(performance_path, 'ndcgs_avg_CF.pkl'), 'rb') as f:
-        ndcgs_avg = pickle.load(f)
-
+    df_medpar, df_rental, df_sponsor = load_dataset()
+    uids, iids, df_train, df_test, df_neg, users, items, label_encoder_user, label_encoder_item = transform_dataset(df_medpar, df_rental, df_sponsor)
 
     try:
         # If user has not give any rating or has not click some vendor(s) within a session
         uids = label_encoder_user.inverse_transform(uids)
+
         if user_id in uids:
+            # Load CF model
+            model_cf_path = os.path.join(current_directory, 'model')
+            model_cf = load_model(os.path.join(model_cf_path, 'model_cf.h5'))
+
             # Predict ratings using CF model
-            ratingsCF = predict_ratings_cf(
+            ratings_cf = predict_ratings_cf(
                 user_id = user_id,
                 items = items,
-                model = modelCF,
+                model = model_cf,
                 label_user = label_encoder_user,
                 label_item = label_encoder_item
             )
 
-            average_ratings, recommendation_items = get_top_k_items(ratingsCF, k = 10)
+            average_ratings, recommendation_items = get_top_k_items(ratings_cf, k = 10)
     
         # Else proceed to predict using CB model
         else:
-            '''
-            FILL THE CODE HERE FOR CB
-            '''
-            recommendation_items = []
+            recommendation_items = model_basic(df_medpar, df_rental, df_sponsor)
 
         dct = {
             'status': 200,

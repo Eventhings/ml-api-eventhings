@@ -1,4 +1,5 @@
-import pickle
+import pandas as pd
+import numpy as np
 
 import tensorflow as tf
 from tensorflow.keras.layers import Input, Embedding, Flatten, Multiply, Dropout, Dense, BatchNormalization, Concatenate
@@ -6,15 +7,49 @@ from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import L1, L2
 
-from .utils import *
-
-from dotenv import load_dotenv
-import os
-
 #------------------------------------------------------------------------------------------------------------------------------#
 
+def model_basic(df_medpar, df_rental, df_sponsor):
+    """
+    Load data from cloud database
+    """
 
-def model(users, items):
+    # Sort values for all data based on their average rating and get their top 10 items
+    df_medpar = df_medpar.groupby('vendor_id')['rating'].mean().reset_index()
+    df_rental = df_rental.groupby('vendor_id')['rating'].mean().reset_index()
+    df_sponsor = df_sponsor.groupby('vendor_id')['rating'].mean().reset_index()
+
+    # Get a random number of top items for each category, ensuring the total is 10
+    total_top_items = 10
+    top_items_medpar = np.random.randint(3, 5)  # Randomly choose 3 or 4 top items
+    top_items_rental = np.random.randint(3, 5)  # Randomly choose 3 or 4 top items
+    top_items_sponsor = total_top_items - top_items_medpar - top_items_rental
+
+    # Select the top items for each category
+    df_medpar = df_medpar.sort_values(by = 'rating', ascending = False).iloc[:top_items_medpar]
+    df_rental = df_rental.sort_values(by = 'rating', ascending = False).iloc[:top_items_rental]
+    df_sponsor = df_sponsor.sort_values(by = 'rating', ascending = False).iloc[:top_items_sponsor]
+
+    # Concat the results then shuffle
+    df = pd.concat([df_medpar, df_rental, df_sponsor])
+    df = df[['vendor_id']].values
+    recommendations = []
+    for item in df:
+        recommendations.append(item[0])
+    np.random.shuffle(recommendations)
+
+    return recommendations
+
+
+def model_cf(users, items):
+    """
+    Tensorflow collaborative-filtering recsys model for the mainpage within the app.
+
+    Args:
+        users (list): all unique users within historical data.
+        items (list): all unique items within historical data.
+    """
+    
     # HYPERPARAMS
     latent_features = 20
     learning_rate = 0.005
@@ -104,63 +139,12 @@ def model(users, items):
                         name = 'output_layer')(merged_vector)
 
     # Define the model
-    modelCF = Model(inputs = [user_input, item_input], outputs = output_layer)
+    model = Model(inputs = [user_input, item_input], outputs = output_layer)
 
     # Compile the model with binary cross entropy loss and Adam optimizer
     optimizer = Adam(learning_rate = learning_rate)
-    modelCF.compile(optimizer = optimizer,
-                    loss = 'binary_crossentropy',
-                    metrics = ['accuracy'])
+    model.compile(optimizer = optimizer,
+                  loss = 'binary_crossentropy',
+                  metrics = ['accuracy'])
     
-    return modelCF
-
-
-def train_model_CF():
-    recsys_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
-    modelCF_path = os.path.join(recsys_directory, 'model')
-
-    # Load dataset
-    uids, iids, df_train, df_test, df_neg, users, items, label_encoder_user, label_encoder_item = load_dataset()
-    
-    # HYPERPARAMS
-    num_neg = 4
-    epochs = 4
-    batch_size = 1024
-
-    # Load previous best performance if exists
-    try:
-        performance_path = os.path.join(recsys_directory, 'performance')
-        with open(os.path.join(performance_path, 'hitrates_avg_CF.pkl'), 'rb') as f:
-            best_hr = pickle.load(f)
-        with open(os.path.join(performance_path, 'ndcgs_avg_CF.pkl'), 'rb') as f:
-            best_ndcgs = pickle.load(f)
-
-    except:
-        best_hr = 0
-        best_ndcgs = 0
-
-    curr_modelCF = model(users, items)
-    for epoch in range(epochs):
-        # Get our training input.
-        user_input, item_input, labels = get_train_instances(uids, iids, items, num_neg)
-    
-        # Training        
-        hist = curr_modelCF.fit([np.array(user_input), np.array(item_input)], #input
-                                np.array(labels), # labels 
-                                batch_size = batch_size, 
-                                verbose = 0, 
-                                shuffle = True)
-
-        # Evaluation
-        (hitrates, ndcgs) = evaluate(curr_modelCF, df_test, df_neg, label_encoder_user, label_encoder_item)
-        hitrates_avg, ndcgs_avg, loss = np.array(hitrates).mean(), np.array(ndcgs).mean(), hist.history['loss'][0]
-        if hitrates_avg >= best_hr:
-            curr_modelCF.save(os.path.join(modelCF_path, 'modelCF.h5'))
-            
-            with open(os.path.join(performance_path, 'hitrates_avg_CF.pkl'), 'wb') as f:
-                pickle.dump(hitrates_avg, f)
-
-            with open(os.path.join(performance_path, 'ndcgs_avg_CF.pkl'), 'wb') as f:
-                pickle.dump(ndcgs_avg, f)
-
-            print("Model has been updated.")
+    return model
