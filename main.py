@@ -25,9 +25,6 @@ importlib.reload(cb)
 load_dotenv()
 #------------------------------------------------------------------------------------------------------------------------------#
 app = FastAPI()
-nlp_db = cne.Load_Data_NLP()
-cb_db = cb.Load_Data_CB()
-
 origins = [
     "*"
 ]
@@ -140,7 +137,9 @@ def nlpe_coll_sp(cat_id:str,
                  cat:str,
                  response: Response):
     # load preprocessed data and sentences
+    nlp_db = cne.Load_Data_NLP()
     DF_PROCESS = nlp_db.load_data(f'{cat}_review')
+    nlp_db.close_database()
     sentences = DF_PROCESS.loc[DF_PROCESS.iloc[:,1]==cat_id,'review'].values
 
     # if the there is no desired id in the data
@@ -187,7 +186,9 @@ def nlpe_per_sp(review_id:str,
                 cat:str,
                 response:Response):
     # load preprocessed data and sentences
+    nlp_db = cne.Load_Data_NLP()
     DF_PROCESS = nlp_db.load_data(f'{cat}_review')
+    nlp_db.close_database()
     sentences = DF_PROCESS.loc[DF_PROCESS.iloc[:,0]==review_id,'review'].values
 
     # if the there is no desired id in the data
@@ -239,7 +240,9 @@ def nlpe_per_sp(review_id:str,
 def cb_recsys(cat_id:str,
               cat:str=['sponsorship','rentals','media_partner']):
     # load preprocessed data
+    cb_db = cb.Load_Data_CB()
     DF_PROCESS = cb_db.load_data(table=cat)
+    cb_db.close_database()
 
     # if the there is no desired id in the data
     if cat_id not in DF_PROCESS['id'].values:
