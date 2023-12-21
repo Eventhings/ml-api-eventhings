@@ -3,7 +3,7 @@ numpy
 pandas
 pydantic
 tensorflow
-uvicorn
+uvicorn==0.25.0
 gunicorn
 python-dotenv
 psycopg2-binary
