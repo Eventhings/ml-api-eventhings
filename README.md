@@ -51,6 +51,3 @@ pip install ./requirement.txt
 uvicorn main:app
 ```
 7. Enjoy the models as an APIs
-   
-## API Documentation
-Postman Collection: https://documenter.getpostman.com/view/18445120/2s9Ykkgiqj
