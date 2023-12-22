@@ -26,6 +26,16 @@ import os
 
 class RecommenderSystem:
     def __init__(self, data:pd.core.frame.DataFrame, content_col, encoder_path = None, model_path = None):
+        """
+            Initialize data, consisting of content_col, from which we have sentences to analyze
+        """
+        """
+            INPUT
+            content_col: column names consisting of description of the sponsorship_id,rentals_id, or media_partner_id.
+            encoder_path: label encoder's path (None only if to retrain)
+            model_path: model's path (None only if to retrain)
+
+        """
         if 'id' not in data.columns:
             raise ValueError("The DataFrame must contain 'id' columns.")
         if content_col is None:
@@ -42,6 +52,7 @@ class RecommenderSystem:
             self.model = None
 
     def preprocess_data(self):
+        """Split train and validation data, then encode the label."""
         X_train, X_val, y_train, y_val = train_test_split(
             self.df['metadata'], self.df['field'], test_size=0.2, random_state=42,# stratify=self.df['field']
         )
@@ -53,6 +64,21 @@ class RecommenderSystem:
         return X_train, X_val, y_train_encoded, y_val_encoded
 
     def train_model(self, X_train, y_train, X_val, y_val, epochs=10, save_model = None, save_encoder = None):
+        """
+            Using Tensorflow, train the data to establish the model
+        """
+        """ 
+            INPUT
+            X_train, y_train: training data
+            X_val, y_val: validating data
+            epochs: number of epochs
+            save_model: path where the model will be saved (None if not saving the model)
+            save_encoder: path where the model will be saved (None if not saving the encoder)
+        """
+        """
+            OUTPUT
+            model and training history
+        """
         self.encoder = CountVectorizer(stop_words="english", tokenizer=word_tokenize)
         X_train_encoded = self.encoder.fit_transform(X_train).toarray()
         X_val_encoded = self.encoder.transform(X_val).toarray()
@@ -83,7 +109,9 @@ class RecommenderSystem:
         return model, history
 
     def plot_accuracy(self, history):
-        # Plot training and validation accuracy
+        """
+            Plot training and validation accuracy
+        """
         plt.plot(history.history['accuracy'], label='Training Accuracy')
         plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
         plt.xlabel('Epoch')
@@ -92,10 +120,25 @@ class RecommenderSystem:
         plt.show()
 
     def fit(self):
+        """
+            Encode and fit the sentence(s) based on the label encoder
+        """
         self.encoder = CountVectorizer(stop_words="english", tokenizer=word_tokenize)
         self.bank = self.encoder.fit_transform(self.df[self.content_col])
 
     def recommend(self, idx:str, topk=10):
+        """
+            Predict the sentence(s) and provide any recommendation id (based on the cosine distances)
+        """
+        """ 
+            INPUT
+            idx: sponsorship_id, rentals_id, or media_partner_id we want to recommend
+            topk: number of recommendations
+        """
+        """ 
+            OUTPUT
+            list of recomendation id(s)
+        """
         content = self.df.loc[self.df['id']==idx, self.content_col].values[0]
         code = self.encoder.transform([content])
         dist = cosine_distances(code, self.bank)
@@ -106,6 +149,15 @@ class RecommenderSystem:
             graph_history=False,
             save_model=None,
             save_encoder=None):
+        """
+            Process to train data
+        """
+        """ 
+            INPUT
+            graph_history: True if we want to show graph
+            save_model: path to save the model (None if not saving the model)
+            save_encoder: path to save the model (None if not saving the encoder)
+        """
         X_train, X_val, y_train, y_val = self.preprocess_data()
         self.model, history = self.train_model(X_train, y_train, X_val, y_val, epochs=10,save_model=save_model,save_encoder=save_encoder)
         if graph_history == True:
@@ -113,6 +165,9 @@ class RecommenderSystem:
 
 class Load_Data_CB():
     def __init__(self):
+        """
+            Connect to database using information from dotenv
+        """
         dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
         load_dotenv(dotenv_path)
         DB_USERNAME = os.getenv('DB_USERNAME')
@@ -139,6 +194,17 @@ class Load_Data_CB():
         return None
     
     def load_data(self,table=['sponsorship','rentals','media_partner']):
+        """
+            Load data from database and preprocess it
+        """
+        """ 
+            INPUT
+            table: which category of the data we want to recommend
+        """
+        """ 
+            OUTPUT
+            Preprocessed data, ready to be applied to the recsys CB
+        """
         self.cur.execute(f'''
         SELECT * FROM {table}
         ''')
@@ -149,6 +215,9 @@ class Load_Data_CB():
         return DF_PROCESS
     
     def close_database(self):
+        """
+            Close the database
+        """
         if self.cur:
             self.cur.close()
         if self.conn:
@@ -156,12 +225,3 @@ class Load_Data_CB():
         print('The database has been closed.')
         return None
     
-# lo = Load_Data_CB()
-# df_lo = lo.load_data('media_partner')
-# recsys_model = RecommenderSystem(df_lo, content_col="metadata",
-#                                  encoder_path='media_partner_encoder.joblib',
-#                                  model_path='media_partner_cb_model.h5')
-# # recsys_model.run(save_encoder='media_partner_encoder.joblib',save_model='media_partner_cb_model.h5')
-# recsys_model.fit()
-# print(recsys_model.recommend('6b0b5bf3-16f4-4405-b0ae-4313228ee31f'))
-# print(recsys_model.recommend('c2a2b772-6696-476e-b230-7eda70a1d453'))
